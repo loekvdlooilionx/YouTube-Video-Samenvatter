@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use App\Services\AiService;
+use App\Http\models\Video;
+
 
 class VideoController extends Controller
 {
@@ -42,8 +45,29 @@ class VideoController extends Controller
         }
 
         // Simpele “AI” korte samenvatting placeholder
-        $summary_short = substr($video['snippet']['description'], 0, 200) . '...';
+       $summary_long = substr($video['transcript'] ?? $video['description'], 0, 1000) . '...';
 
         return view('video', compact('video', 'summary_short'));
     }
+    public function generateSummary($id, AiService $ai)
+    {
+        $video = Video::findOrFail($id);
+
+        $video->summary_short = $ai->summarize($video->transcript);
+        $video->category = $ai->sentiment($video->transcript);
+        $tags = $ai->keywords($video->transcript);
+
+        $video->save();
+
+        foreach ($tags as $tagName) {
+            $tag = \App\Models\Tag::firstOrCreate(['name' => $tagName]);
+            $video->tags()->syncWithoutDetaching([$tag->id]);
+        }
+
+        return response()->json([
+            'video' => $video,
+            'tags' => $tags
+        ]);
+    }
+
 }
